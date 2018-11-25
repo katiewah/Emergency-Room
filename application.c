@@ -10,6 +10,11 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////
 
+int P1Count = 1;
+int P2Count = 1;
+int P3Count = 1;
+int P4Count = 1;
+
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Data structures for event data
@@ -84,6 +89,7 @@ struct Generator {
     int Count;             // number of items that are entering the system
 };
 
+
 //
 // Exit component
 //
@@ -144,7 +150,7 @@ int compCount = 0;                  //number of components created
 ///////////////////////////////////
 // Generator for type 1 Patients
 ///////////////////////////////////
-struct Generator MakeGenerator1 (int GenID, double IntTime, double IntTime2, double IntTime3, double IntTime4, int DestID)
+struct Generator MakeGenerator1 (int GenID, double IntTime, int DestID)
 {   struct Generator* p;
     struct EventData* d;
     struct EventData* d2;
@@ -170,15 +176,36 @@ struct Generator MakeGenerator1 (int GenID, double IntTime, double IntTime2, dou
     printf("%f\n", CurrentTime());
     Schedule (IntTime, d);  // should use random draw here
 
+    return *p;
+}
+
+struct Generator MakeGenerator2 (int GenID, double IntTime, int DestID)
+{   struct Generator* p2;
+    struct EventData* d;
+    struct EventData* d2;
+    compCount++;
+    
+    // Add component to master list; Caller is responsible for handling set up errors
+    Component[GenID].ComponentType = GENERATOR;
+    printf ("Creating Generator Component, ID=%d, Interarrival time=%f, Destination=%d\n", GenID, IntTime, DestID);
+    
+    // Allocate space for component, fill in parameters
+    if ((p2 = malloc (sizeof(struct Generator))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
+    p2->IntArrTime = IntTime;
+    p2->DestComp = DestID;
+    p2-> Count = 0;
+    Component[GenID].Comp = p2;
+    
     // schedule initial, first generator event for this component for patient of type 1
     if ((d2 = malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
     d2->EventType = GENERATE2;
     d2->Cust = NULL;
     //d -> Cust -> type = 1;
     d2->CompID = GenID;
-    Schedule (IntTime2, d2);
+    printf("%f\n", CurrentTime());
+    Schedule (IntTime, d2);  // should use random draw here
 
-    return *p;
+    return *p2;
 }
 
 
@@ -202,8 +229,8 @@ void MakeExit (int ExitID)
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 // prototypes for event handlers
-void Generate1 (struct EventData *e);    // generate new customer
-void Generate2 (struct EventData *e); 
+void Generate1 (struct EventData *e, int IAT);    // generate new customer
+void Generate2 (struct EventData *e, int IAT); 
 void Arrival (struct EventData *e);     // arrival at a component
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -235,9 +262,8 @@ void EventHandler (void *data)
     // coerce type so the compiler knows the type of information pointed to by the parameter data.
     d = (struct EventData *) data;
     // call an event handler based on the type of event
-    #printf("%f",CurrentTime());
-    if (d->EventType == GENERATE1) Generate1 (d);
-    else if (d->EventType == GENERATE2) Generate2 (d);
+    if (d->EventType == GENERATE1) Generate1 (d, 10);
+    else if (d->EventType == GENERATE2) Generate2 (d, 18);
     else if (d->EventType == ARRIVAL) Arrival (d);
     else {
         fprintf (stderr, "Illegal event found\n"); 
@@ -248,7 +274,7 @@ void EventHandler (void *data)
 }
 
 // event handler for generate events
-void Generate1 (struct EventData *e)
+void Generate1 (struct EventData *e, int IAT)
 {
     struct EventData *d;
     struct Customer *NewCust;
@@ -256,11 +282,14 @@ void Generate1 (struct EventData *e)
     struct Generator *pGen;  // pointer to info on generator component
  
     if (e->EventType != GENERATE1) {fprintf (stderr, "Unexpected event type\n"); exit(1);}
-    printf ("Processing Generate event at time %f, Component=%d\n", CurrentTime(), e->CompID);
+    printf ("Processing Generate1 event at time %f, Component=%d\n", CurrentTime(), e->CompID);
+    P1Count ++;
     
     if (Component[e->CompID].ComponentType != GENERATOR) {fprintf(stderr, "bad componenet type\n"); exit(1);}
     // Get pointer to state information for generator component
     pGen = (struct Generator *) Component[e->CompID].Comp;
+    printf("\nInter arr time: %f\n",pGen->IntArrTime);
+    pGen->IntArrTime = IAT;
     
     // Create a new customer
     if ((NewCust=malloc (sizeof(struct Customer))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
@@ -268,6 +297,8 @@ void Generate1 (struct EventData *e)
     NewCust->ExitTime = 0.0;    // undefined initially
     NewCust->next = NULL;       // undefined initially
     NewCust -> WaitTime = 0;
+    NewCust -> type = 1;
+    printf("\nPatient Type: %d\n",NewCust -> type);
     pGen -> Count ++;
 
     // Schedule arrival event at component connected to generator
@@ -283,11 +314,13 @@ void Generate1 (struct EventData *e)
     if ((d=malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
     d->EventType = GENERATE1;
     d->CompID = e->CompID;
-    ts = CurrentTime() + pGen->IntArrTime;       // need to modify to exponential random number
+    ts = P1Count * pGen->IntArrTime;       // need to modify to exponential random number
     Schedule (ts, d);
+    printf("scheduled at %f\n", ts);  
+    
 }
 
-void Generate2 (struct EventData *e)
+void Generate2 (struct EventData *e, int IAT)
 {
     struct EventData *d;
     struct Customer *NewCust;
@@ -300,6 +333,8 @@ void Generate2 (struct EventData *e)
     if (Component[e->CompID].ComponentType != GENERATOR) {fprintf(stderr, "bad componenet type\n"); exit(1);}
     // Get pointer to state information for generator component
     pGen = (struct Generator *) Component[e->CompID].Comp;
+    printf("\nInter arr time: %f\n",pGen->IntArrTime);
+    pGen->IntArrTime = IAT;
     
     // Create a new customer
     if ((NewCust=malloc (sizeof(struct Customer))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
@@ -307,6 +342,8 @@ void Generate2 (struct EventData *e)
     NewCust->ExitTime = 0.0;    // undefined initially
     NewCust->next = NULL;       // undefined initially
     NewCust -> WaitTime = 0;
+    NewCust -> type = 2;
+    printf("\nPatient Type: %d\n",NewCust -> type);
     pGen -> Count ++;
 
     // Schedule arrival event at component connected to generator
@@ -360,13 +397,17 @@ int main (void)
 {
     struct EventData *d;
     double ts;
+
+    double IAT1 = 10;
+    double IAT2 = 18;
     
     // create components
-    MakeGenerator1 (0, 10.0, 18.0, 30.0, 60.0, 1);
+    MakeGenerator1 (0, IAT1, 1);
+    MakeGenerator2 (0, IAT2, 1);
     //MakeGenerator2 (0, 18.0, 1);
     //MakeGenerator3 (0, 30.0, 1);
     //MakeGenerator4 (0, 60.0, 1);
     MakeExit (1);
 
-    RunSim(100.0);
+    RunSim(120.0);
 }
