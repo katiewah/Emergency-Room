@@ -66,6 +66,12 @@ struct FIFOQueue {
     struct Customer* temp;    
 };
 
+struct PrioQ {
+    struct Customer* first;     // pointer to first customer in queue
+    struct Customer* last;      // pointer to last customer in queue
+    struct Customer* next;    
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Data Structures for Components
@@ -122,6 +128,15 @@ struct Station {
     double avgServiceTime;         //service time
     int DestComp;                  // ID of next component customers are sent to
     struct FIFOQueue* fifo;        //fifo queue at every station
+    double sTime;                  //scheduled time of the last scheduled event
+    double wait;                   //average wait time of a customer in that station
+    int count;                     //number of customers who go though that station
+};
+
+struct EmerRoom {
+    double avgServiceTime;         //service time
+    int DestComp;                  // ID of next component customers are sent to
+    struct PrioQ* pq;        //fifo queue at every station
     double sTime;                  //scheduled time of the last scheduled event
     double wait;                   //average wait time of a customer in that station
     int count;                     //number of customers who go though that station
@@ -262,9 +277,29 @@ struct Generator MakeGenerator4 (int GenID, double IntTime, int DestID)
     return *p;
 }
 
+// Create an CheckInOut Component with identifier ExitID
+struct Station MakeStation (int StationID, double avgServiceTime, int DestID) {
+    struct Station* s;
+    compCount++;
+
+    // Add component to master list; Caller is responsible for handling set up errors
+    Component[StationID].ComponentType = QUEUE_STATION;
+    printf ("Creating Station Component, ID=%d, avgServiceTime=%f, Destination=%d\n", StationID, avgServiceTime, DestID);
+
+    // Allocate space for component, fill in parameters
+    if ((s = malloc (sizeof(struct Station))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
+    s -> avgServiceTime = avgServiceTime;
+    s -> DestComp = DestID;
+    s -> sTime = 0.0;
+    s ->count = 0;
+    s -> wait = 0;
+    
+    Component[StationID].Comp = s;
+    return *s;
+}
 
 // Create an Exit Component with identifier ExitID
-void MakeExit (int ExitID)
+struct Exit MakeExit (int ExitID)
 {   struct Exit *p;
     
     printf ("Creating Exit Component, ID=%d\n", ExitID);
@@ -274,6 +309,7 @@ void MakeExit (int ExitID)
     if ((p=malloc (sizeof(struct Exit))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
     p->Count = 0;
     Component[ExitID].Comp = p;
+    return *p;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -283,9 +319,18 @@ void MakeExit (int ExitID)
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 // prototypes for event handlers
-void Generate1 (struct EventData *e);    // generate new customer
-void Generate2 (struct EventData *e); 
-void Arrival (struct EventData *e);     // arrival at a component
+void Generate1 (struct EventData *e);    // generate new customer 
+void Arrival (struct EventData *e, double done);     // arrival at a component
+
+////////////////////////////////////////////////////
+//
+//creates random double that exists between 0 and 1
+//
+////////////////////////////////////////////////////
+double urand(void) {
+    double r = (double) rand() / RAND_MAX;
+    return (r);
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -309,7 +354,7 @@ void Arrival (struct EventData *e);     // arrival at a component
 //
 
 // General Event Handler Procedure defined in simulation engine interface called by simulation engine
-void EventHandler (void *data)
+void EventHandler (void *data, double done)
 {
     struct EventData *d;
     
@@ -320,7 +365,7 @@ void EventHandler (void *data)
     else if (d->EventType == GENERATE2) Generate1 (d);
     else if (d->EventType == GENERATE3) Generate1 (d);
     else if (d->EventType == GENERATE4) Generate1 (d);
-    else if (d->EventType == ARRIVAL) Arrival (d);
+    else if (d->EventType == ARRIVAL) Arrival (d, done);
     else {
         fprintf (stderr, "Illegal event found\n"); 
         exit(1);
@@ -392,6 +437,8 @@ void Generate1 (struct EventData *e)
     d->Cust = NewCust;
     printf("%d", NewCust -> type);
     d->CompID = pGen->DestComp;
+    printf("destination Comp: %d\n", pGen->DestComp);
+    printf("Comp type %d\n",Component[d->CompID].ComponentType);
     ts = CurrentTime();
     Schedule (ts, d);
     
@@ -417,14 +464,16 @@ void Generate1 (struct EventData *e)
 }
 
 // event handler for arrival events
-void Arrival (struct EventData *e)
+void Arrival (struct EventData *e, double done)
 {
     struct EventData *d;
     double ts;
     int Comp;                   // ID of component where arrival occurred
     struct Exit *pExit;         // pointer to info on exit component
+    struct Station* pStation;   // pointer to info at station 
 
     if (e->EventType != ARRIVAL) {fprintf (stderr, "Unexpected event type\n"); exit(1);}
+    //printf("component type: %d\n",Component[Comp].ComponentType);
     printf ("Processing Arrival event at time %f, Component=%d\n", CurrentTime(), e->CompID);
     
     // processing depends on the type of component arrival occurred at
@@ -433,8 +482,34 @@ void Arrival (struct EventData *e)
         (pExit->Count)++;       // number of exiting ßcustomers
         free (e->Cust);         // release memory of exiting customer
     }
-    else if (Component[Comp].ComponentType == QUEUE_STATION) {
+    else if (Component[e->CompID].ComponentType == QUEUE_STATION) {
+
         // code for customer arrival at a queue station
+        pStation = (struct Station*) Component[e -> CompID].Comp;
+        (pStation -> count) ++;
+
+        if ((d=malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
+        d->EventType = ARRIVAL;  
+        d -> Cust = e -> Cust;   
+        d->CompID = pStation -> DestComp;
+        
+        double u = (pStation -> avgServiceTime);
+        //if (CurrentTime() + (pStation -> avgServiceTime) > pStation -> sTime) {
+        if (CurrentTime() >= pStation -> sTime) {
+            double aTime = (-u*(log(1.0 - urand())));            //exponentian random varialbe
+            Schedule(CurrentTime() + aTime, d);
+            pStation -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
+        } else {
+            double aTime = (-u*(log(1.0 - urand())));             //exponential random varialbe
+            Schedule(pStation -> sTime + aTime, d); 
+            if (pStation -> sTime + aTime > done) {
+                pStation -> wait += (done - CurrentTime());
+            } else {
+                pStation -> wait += (pStation -> sTime) - CurrentTime();
+            }
+            pStation -> sTime = pStation -> sTime + (pStation -> avgServiceTime);
+            e -> Cust -> WaitTime += (pStation -> sTime) - CurrentTime();
+        }
     }
     else if (Component[Comp].ComponentType == FORK) {
         // code for customer arrival at a fork component
@@ -459,9 +534,9 @@ int main (void)
     MakeGenerator2 (1, 18, 4);
     MakeGenerator3 (2, 30, 4);
     MakeGenerator4 (3, 60, 4);
-    //MakeGenerator3 (0, 30.0, 1);
-    //MakeGenerator4 (0, 60.0, 1);
-    MakeExit (4);
+    MakeStation (4, 5, 5);
+    MakeStation (5, 5, 6);
+    MakeExit (6);
 
     RunSim(120.0);
 }
