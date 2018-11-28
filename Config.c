@@ -171,7 +171,7 @@ void Schedule (double ts, void *data)
 }
 
 // Function to execute simulation up to a specified time (EndTime)
-// void RunSim (double EndTime)
+void RunSim (double EndTime)
 {
     struct Event *e;
 
