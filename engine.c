@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "sim.h"
 
+
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
 // General Purpose Discrete Event Simulation Engine
@@ -12,8 +13,8 @@
 // Simulation Engine Data Structures
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Data srtucture for an event; note this is designed to be independent of the application domain.
-// Each event can have parameters defined within the spplication. We want the simulation engine
+// Data structure for an event; note this is designed to be independent of the application domain.
+// Each event can have parameters defined within the application. We want the simulation engine
 // not to have to know the number or types of these parameters, since they are dependent on the
 // application, and we want To keep the engine independent of the application. To address this problem
 // each event only contains a single parameter, a pointer to the application defined parameters (AppData).
@@ -24,8 +25,10 @@
 //
 struct Event {
 	double timestamp;		// event timestamp
-    void *AppData;			// pointer to application defined event parameters
+    void* AppData;			// pointer to application defined event parameters
 	struct Event *Next;		// priority queue pointer
+	int custType;           //
+	int nextComp;
 };
 
 // Simulation clock variable
@@ -47,7 +50,7 @@ struct Event FEL ={-1.0, NULL, NULL};
 void PrintList (void);
 
 // Function to remove smallest timestamped event
-struct Event *Remove (void);
+struct Event* Remove (void);
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 // Simulation Engine Functions Internal to this module
@@ -55,9 +58,9 @@ struct Event *Remove (void);
 
 // Remove smallest timestamped event from FEL, return pointer to this event
 // return NULL if FEL is empty
-struct Event *Remove (void)
+struct Event* Remove (void)
 {
-    struct Event *e;
+    struct Event* e;
     
     if (FEL.Next==NULL) return (NULL);
     e = FEL.Next;		// remove first event in list
@@ -70,11 +73,11 @@ void PrintList (void)
 {
     struct Event *p;
     
-    printf ("Event List: ");
+    /*printf ("\n\nEvent List: ");
     for (p=FEL.Next; p!=NULL; p=p->Next) {
         printf ("%f ", p->timestamp);
     }
-    printf ("\n");
+    printf ("\n");*/
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -102,7 +105,7 @@ double CurrentTime (void)
 // Schedule new event in FEL
 // queue is implemented as a timestamp ordered linear list
 
-void Schedule (double ts, void *data)
+void Schedule (double ts, void *data, int custType, int nextComp)
 {
 	struct Event *e, *p, *q;
 
@@ -110,6 +113,9 @@ void Schedule (double ts, void *data)
 	if ((e = malloc (sizeof (struct Event))) == NULL) exit(1);
 	e->timestamp = ts;
 	e->AppData = data;
+	e -> custType = custType;
+	e -> nextComp = nextComp;
+	printf("typeReg: %d\n",e -> custType);
 
 	// insert into priority queue
 	// p is lead pointer, q is trailer
@@ -121,12 +127,115 @@ void Schedule (double ts, void *data)
 	q->Next = e;
 }
 
+double PrioritySchedule (double ts, void *data, int custType, int nextComp)
+{	
+	int flag = 0;
+	struct Event *e, *p, *q;
+	double end;
+	double endFlag = 0;
+	double add;
+
+	// create event data structure and fill it in
+	if ((e = malloc (sizeof (struct Event))) == NULL) exit(1);
+	e->timestamp = ts;
+	e->AppData = data;
+	e -> custType = custType;
+	e -> nextComp = nextComp;
+	printf("typePQ: %d\n",e -> custType);
+
+	// insert into priority queue
+	// p is lead pointer, q is trailer
+	for (q=&FEL, p=FEL.Next; p!=NULL; p=p->Next, q=q->Next) {
+		if (p -> nextComp >= 6) {
+			printf("\n%f   ",p -> timestamp);
+			printf("%d   ",p -> custType);
+			printf("%d   ",p -> nextComp);
+		}		
+	}
+
+	printf("\n\n");
+
+	for (q=&FEL, p=FEL.Next; p!=NULL; p=p->Next, q=q->Next) {
+		printf("here");
+		if ((p->custType < e->custType) && (p->nextComp == e->nextComp)) break;
+		printf("%d   %d,      %d   %d\n", p->custType, e->custType, p->nextComp, e->nextComp);
+		if (p -> Next == NULL) {
+			flag = 1;
+		}
+	}
+	
+	// insert after q (before p)
+	e->Next = q->Next;
+	q->Next = e;
+
+	if (flag == 0) {
+		e -> timestamp = p -> timestamp;
+
+	} else {
+		if (e -> custType == 1) {
+			add = 15;
+		} else if (e -> custType == 2) {
+			//printf("here1\n");
+			add = 30;
+		} else if (e -> custType == 3) {
+			add =  60;
+		} else if (e -> custType == 4) {
+			add = 90;
+		}
+		e -> timestamp = q -> timestamp + add;
+		end = e -> timestamp + ts;
+		endFlag = 1;	
+	}
+
+	//returnsTime(e -> timestamp);
+	printf("here2");	
+	
+	//changes timestamps of future events that need to be changed
+	//updates sTime for the component appropriatelty
+	for (q= q -> Next, p=p; p!=NULL; p=p->Next, q=q->Next) {
+		if ((p->custType < e->custType) && (p->nextComp >= e->nextComp))
+			p -> timestamp = p -> timestamp + ts; 
+			if (p->nextComp == e->nextComp) {
+				if ((p -> custType == 1) && (endFlag == 0)) {
+					end = p -> timestamp + 15;
+				} else if ((p -> custType == 2) && (endFlag == 0)) {
+					end = p -> timestamp + 30;
+				} else if ((p -> custType == 3) && (endFlag == 0)) {
+					end = p -> timestamp + 60;
+				} else if ((p -> custType == 4) && (endFlag == 0)) {
+					end = p -> timestamp + 90;
+				}
+			}
+			
+			//end = 
+	}
+
+	for (q=&FEL, p=FEL.Next; p!=NULL; p=p->Next, q=q->Next) {
+		if (p -> nextComp >= 6) {
+			printf("\n%f   ",p -> timestamp);
+			printf("%d   ",p -> custType);
+			printf("%d   ",p -> nextComp);
+		}
+	}
+		
+	printf("\n\n");
+
+	return(end); 
+}
+
+
+
+// double returnsTime(double ts) {
+// 	return ts;
+// }
+
 // Function to execute simulation up to a specified time (EndTime)
-void RunSim (double EndTime) {
+void RunSim (double EndTime)
+{
 	double done = end(EndTime);
 	struct Event *e;
 
-	printf ("Initial event list:\n");
+	printf ("\nInitial event list:\n");
 	PrintList ();
 
 	// Main scheduler loop
@@ -140,13 +249,12 @@ void RunSim (double EndTime) {
 		free (e);	// it is up to the event handler to free memory for parameters
         PrintList ();
 	}
-	if ((e = Remove()) == NULL) {
+	if ((e=Remove()) == NULL) {
 		printf("end");
 	}
-
 }
 
-double end(double EndTime) {
+double end (double EndTime) {
 	return EndTime;
 }
 
