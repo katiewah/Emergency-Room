@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
-#include "sim.h"
+#include "simRand.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -20,6 +20,8 @@ int numDeaths = 0;
 int numPatientsSaved = 0;
 int numPatientsER = 0;
 int sixhours = 0;
+int DRcount = 0;
+int conciergeCount = 0;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -300,6 +302,7 @@ struct CheckInOut MakeCheckInOut (int StationID, double avgServiceTime, int Dest
     struct CheckInOut* s;
     //struct FIFOQueue* fifo;
     compCount++;
+    conciergeCount++;
 
     // Add component to master list; Caller is responsible for handling set up errors
     Component[StationID].ComponentType = QUEUE_STATION;
@@ -323,6 +326,7 @@ struct CheckInOut MakeCheckInOut (int StationID, double avgServiceTime, int Dest
 struct Doctor MakeDoctor (int erID, double avgServiceTime, int DestID) {
     struct Doctor* s;
     compCount++;
+    DRcount++;
 
     // Add component to master list; Caller is responsible for handling set up errors
     Component[erID].ComponentType = EMERROOM;
@@ -763,4 +767,17 @@ int main (void)
     printf("\ndeaths at ER: %d", numDeaths);
     printf("\nsaved: %d", numPatientsSaved);
     printf("\nwaited longer than 6 hours: %d", sixhours);
+    printf("\nFines: %d", ((numDeaths+numDeathsAtCheckIn)*100) + (sixhours*5));
+
+    printf("\n\ndoctors: %d", DRcount);
+    printf("\npeople at front desk: %d", conciergeCount);
+    printf("\nDoctor Cost: %d", DRcount*250);
+    printf("\nFront Desk Cost: %d", conciergeCount*100);
+    printf("\nStaff Cost: %d", (DRcount*250) + (conciergeCount*100));
+    printf("\n\n--------------");
+    printf("\nTOTAL COST: %d", (DRcount*250) + (conciergeCount*100) + ((numDeaths+numDeathsAtCheckIn)*100) + (sixhours*5));
+    printf("\n--------------");
+
 }
+
+//counting "saved" based on free() components, but maybe checkout
