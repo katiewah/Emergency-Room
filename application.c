@@ -20,6 +20,8 @@ int numDeaths = 0;
 int numPatientsSaved = 0;
 int numPatientsER = 0;
 int sixhours = 0;
+int DRcount = 0;
+int conciergeCount = 0;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -290,6 +292,7 @@ struct CheckInOut MakeCheckInOut (int StationID, double avgServiceTime, int Dest
     struct CheckInOut* s;
     //struct FIFOQueue* fifo;
     compCount++;
+    conciergeCount++;
 
     // Add component to master list; Caller is responsible for handling set up errors
     Component[StationID].ComponentType = QUEUE_STATION;
@@ -313,6 +316,7 @@ struct CheckInOut MakeCheckInOut (int StationID, double avgServiceTime, int Dest
 struct Doctor MakeDoctor (int erID, double avgServiceTime, int DestID) {
     struct Doctor* s;
     compCount++;
+    DRcount++;
 
     // Add component to master list; Caller is responsible for handling set up errors
     Component[erID].ComponentType = EMERROOM;
@@ -601,7 +605,7 @@ void Arrival (struct EventData *e, double done)
             printf("This is the patients creation time vs current time: %f     %f", d -> Cust -> CreationTime, CurrentTime());
             if (CurrentTime() >= pER-> sTime) {
                 //printf("\n\n\nhere %f     %f\n\n\n", pER -> sTime, CurrentTime());
-                Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
+                Schedule(CurrentTime() + 30, d, d->Cust ->type, d->CompID);
                 //pER -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
                 pER -> sTime = CurrentTime() + 30;
             } else {
@@ -620,7 +624,7 @@ void Arrival (struct EventData *e, double done)
                 d -> Cust -> CreationTime = -1;
                 if (CurrentTime() >= pER-> sTime) {
                     //printf("\n\n\nhere %f     %f\n\n\n", pER -> sTime, CurrentTime());
-                    Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
+                    Schedule(CurrentTime() + 60, d, d->Cust ->type, d->CompID);
                     //pER -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
                     pER -> sTime = CurrentTime() + 60;
                 } else {
@@ -640,7 +644,7 @@ void Arrival (struct EventData *e, double done)
                 d -> Cust -> CreationTime = -1;
                 if (CurrentTime() >= pER-> sTime) {
                     //printf("\n\n\nhere %f     %f\n\n\n", pER -> sTime, CurrentTime());
-                    Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
+                    Schedule(CurrentTime() + 90, d, d->Cust ->type, d->CompID);
                     //pER -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
                     pER -> sTime = CurrentTime() + 90;
                 } else {
@@ -653,7 +657,7 @@ void Arrival (struct EventData *e, double done)
         } else {
             printf("This is the patients creation time vs current time: %f     %f", d -> Cust -> CreationTime, CurrentTime());
             if (CurrentTime() >= pER -> sTime) {
-                Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
+                Schedule(CurrentTime() + (pER-> avgServiceTime), d, d->Cust ->type, d->CompID);
                 //printf("scheduled event at: %f\n", CurrentTime());
                 //pER -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
                 pER -> sTime = CurrentTime() + (pER-> avgServiceTime);
@@ -757,4 +761,14 @@ int main (void)
     printf("\ndeaths at ER: %d", numDeaths);
     printf("\nsaved: %d", numPatientsSaved);
     printf("\nwaited longer than 6 hours: %d", sixhours);
+    printf("\nFines: %d", ((numDeaths+numDeathsAtCheckIn)*100) + (sixhours*5));
+
+    printf("\n\ndoctors: %d", DRcount);
+    printf("\npeople at front desk: %d", conciergeCount);
+    printf("\nDoctor Cost: %d", DRcount*250);
+    printf("\nFront Desk Cost: %d", conciergeCount*100);
+    printf("\nStaff Cost: %d", (DRcount*250) + (conciergeCount*100));
+    printf("\n\n--------------");
+    printf("\nTOTAL COST: %d", (DRcount*250) + (conciergeCount*100) + ((numDeaths+numDeathsAtCheckIn)*100) + (sixhours*5));
+    printf("\n--------------");
 }
