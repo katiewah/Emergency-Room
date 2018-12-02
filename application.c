@@ -15,8 +15,11 @@ int P2Count = 1;
 int P3Count = 1;
 int P4Count = 1;
 int numGenPatients = 0;
+int numDeathsAtCheckIn = 0;
 int numDeaths = 0;
 int numPatientsSaved = 0;
+int numPatientsER = 0;
+int sixhours = 0;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -550,46 +553,36 @@ void Arrival (struct EventData *e, double done)
         d->EventType = ARRIVAL;  
         d -> Cust = e -> Cust;   
         d->CompID = pCheckInOut -> DestComp;
-        // if (pStation -> fifo -> first == NULL && pStation -> fifo -> last == NULL) {
-        //     pStation -> fifo -> first == d -> Cust;
-        //     pStation -> fifo -> last == d -> Cust;
-        // } else {
-        //     pStation -> fifo -> temp = pStation -> fifo -> last;
-        //     pStation -> fifo -> last -> next = d -> Cust;
-        //     pStation -> fifo -> last = pStation -> fifo -> last -> next;
-        // }
-
-        // if ((k=malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
-        // k -> Cust = pStation -> fifo -> first;
-        // k -> EventType = ARRIVAL;
-        // k -> CompID = pStation -> DestComp;
-        // pStation -> fifo -> temp = pStation -> fifo -> first;
-        // pStation -> fifo -> first = pStation -> fifo -> first -> next;
-        // free(pStation -> fifo -> temp);
-        // Schedule(CurrentTime(), k);
-
-
-
         
-        double u = (pCheckInOut -> avgServiceTime);
-        //if (CurrentTime() + (pStation -> avgServiceTime) > pStation -> sTime) {
-        if (CurrentTime() >= pCheckInOut -> sTime) {
-            double aTime = (-u*(log(1.0 - urand())));            //exponentian random varialbe
-            Schedule(CurrentTime() + pCheckInOut -> avgServiceTime, d, d->Cust ->type, d->CompID);
-            pCheckInOut -> sTime = CurrentTime() + (pCheckInOut -> avgServiceTime);
+        if ((d -> Cust -> CreationTime >= 0) && (d -> Cust -> type == 3) && (CurrentTime() - d -> Cust -> CreationTime >= 90)) {
+                free(d);
+                numDeathsAtCheckIn++;
+        } else if ((d -> Cust -> CreationTime >= 0) && (d -> Cust -> type == 4) && (CurrentTime() - d -> Cust -> CreationTime >= 60)) {
+                free(d);
+                numDeathsAtCheckIn++;
         } else {
-            double aTime = (-u*(log(1.0 - urand())));             //exponential random varialbe
-            Schedule(pCheckInOut -> sTime + pCheckInOut -> avgServiceTime, d, d->Cust ->type,  d->CompID); 
-            if (pCheckInOut -> sTime + pCheckInOut -> avgServiceTime > done) {
-                pCheckInOut -> wait += (done - CurrentTime());
+            double u = (pCheckInOut -> avgServiceTime);
+            //if (CurrentTime() + (pStation -> avgServiceTime) > pStation -> sTime) {
+            if (CurrentTime() >= pCheckInOut -> sTime) {
+                double aTime = (-u*(log(1.0 - urand())));            //exponentian random varialbe
+                Schedule(CurrentTime() + pCheckInOut -> avgServiceTime, d, d->Cust ->type, d->CompID);
+                pCheckInOut -> sTime = CurrentTime() + (pCheckInOut -> avgServiceTime);
             } else {
-                pCheckInOut -> wait += (pCheckInOut -> sTime) - CurrentTime();
+                double aTime = (-u*(log(1.0 - urand())));             //exponential random varialbe
+                Schedule(pCheckInOut -> sTime + pCheckInOut -> avgServiceTime, d, d->Cust ->type,  d->CompID); 
+                if (pCheckInOut -> sTime + pCheckInOut -> avgServiceTime > done) {
+                    pCheckInOut -> wait += (done - CurrentTime());
+                } else {
+                    pCheckInOut -> wait += (pCheckInOut -> sTime) - CurrentTime();
+                }
+                pCheckInOut -> sTime = pCheckInOut -> sTime + (pCheckInOut -> avgServiceTime);
+                e -> Cust -> WaitTime += (pCheckInOut -> sTime) - CurrentTime();
             }
-            pCheckInOut -> sTime = pCheckInOut -> sTime + (pCheckInOut -> avgServiceTime);
-            e -> Cust -> WaitTime += (pCheckInOut -> sTime) - CurrentTime();
-        }
+        }    
+            
     }
     else if (Component[e -> CompID].ComponentType == EMERROOM) {
+
         pER = (struct Doctor*) Component[e -> CompID].Comp;
         (pER -> count) ++;
 
@@ -599,7 +592,9 @@ void Arrival (struct EventData *e, double done)
         d->CompID = pER -> DestComp;
         //printf("this is the dest comp: %d\n", d->CompID);
         int fixTime;
-
+        if (CurrentTime() - d -> Cust -> CreationTime > 360) {
+            sixhours++;
+        }
         double u = (pER -> avgServiceTime);
         //if (CurrentTime() + (pStation -> avgServiceTime) > pStation -> sTime) {
         if (d -> Cust -> type == 2) {
@@ -622,6 +617,7 @@ void Arrival (struct EventData *e, double done)
                 free(d);
                 numDeaths++;
             } else {
+                d -> Cust -> CreationTime = -1;
                 if (CurrentTime() >= pER-> sTime) {
                     //printf("\n\n\nhere %f     %f\n\n\n", pER -> sTime, CurrentTime());
                     Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
@@ -641,6 +637,7 @@ void Arrival (struct EventData *e, double done)
                 free(d);
                 numDeaths++;
             } else {
+                d -> Cust -> CreationTime = -1;
                 if (CurrentTime() >= pER-> sTime) {
                     //printf("\n\n\nhere %f     %f\n\n\n", pER -> sTime, CurrentTime());
                     Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
@@ -754,8 +751,10 @@ int main (void)
     MakeCheckInOut (22, 5, 23);
     MakeExit (23);
 
-    RunSim(600.0);          
+    RunSim(1440.0);                          //run for 1440 to get a 24 hour simulation
     printf("\n\nnum Patients who are generated: %d", numGenPatients);
-    printf("\ndeaths: %d", numDeaths);
-    printf("\nsaved: %d\n\n", numPatientsSaved);
+    printf("\ndeaths at Check In: %d", numDeathsAtCheckIn);
+    printf("\ndeaths at ER: %d", numDeaths);
+    printf("\nsaved: %d", numPatientsSaved);
+    printf("\nwaited longer than 6 hours: %d", sixhours);
 }
