@@ -592,7 +592,7 @@ void Arrival (struct EventData *e, double done)
         d->CompID = pER -> DestComp;
         //printf("this is the dest comp: %d\n", d->CompID);
         int fixTime;
-        if (CurrentTime() - d -> Cust -> CreationTime > 360) {
+        if ((CurrentTime() - d -> Cust -> CreationTime > 360) && (d -> Cust -> type != 3) && (d -> Cust -> type != 4)) {
             sixhours++;
         }
         double u = (pER -> avgServiceTime);
