@@ -14,6 +14,9 @@ int P1Count = 1;
 int P2Count = 1;
 int P3Count = 1;
 int P4Count = 1;
+int numGenPatients = 0;
+int numDeaths = 0;
+int numPatientsSaved = 0;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -57,14 +60,15 @@ struct Customer {
     double ExitTime;            // time customer departs system
     struct Customer *next;      // pointer to next customer when it is queued in a FIFO
     double WaitTime;            //waiting time of customer
+    int nextComp;
 };
 
 // Linked List of customers (FIFO Queue)
-struct FIFOQueue {
+typedef struct FIFOQueue {
     struct Customer* first;     // pointer to first customer in queue
     struct Customer* last;      // pointer to last customer in queue
     struct Customer* temp;    
-};
+} FIFOQueue;
 
 struct PrioQ {
     struct Customer* first;     // pointer to first customer in queue
@@ -88,7 +92,8 @@ struct PrioQ {
 #define     GENERATOR4       3
 #define     FORK             4
 #define     QUEUE_STATION    5
-#define     EXIT             6
+#define     EMERROOM         6
+#define     EXIT             7
 //
 // Generator Component
 //
@@ -124,16 +129,16 @@ struct Fork {
 //
 // Station component
 //
-struct Station {
+struct CheckInOut {
     double avgServiceTime;         //service time
     int DestComp;                  // ID of next component customers are sent to
     struct FIFOQueue* fifo;        //fifo queue at every station
     double sTime;                  //scheduled time of the last scheduled event
     double wait;                   //average wait time of a customer in that station
     int count;                     //number of customers who go though that station
-};
+} CheckInOut;
 
-struct EmerRoom {
+struct Doctor {
     double avgServiceTime;         //service time
     int DestComp;                  // ID of next component customers are sent to
     struct PrioQ* pq;        //fifo queue at every station
@@ -190,9 +195,9 @@ struct Generator MakeGenerator1 (int GenID, double IntTime, int DestID)
     d->Cust = NULL;
     //d -> Cust -> type = 1;
     d->CompID = GenID;
-    printf("%f\n", CurrentTime());
-    Schedule (IntTime, d);  // should use random draw here
-
+    //printf("%f\n", CurrentTime());
+    Schedule (IntTime, d,1,4);  // should use random draw here
+    numGenPatients++;
     return *p;
 }
 
@@ -217,9 +222,9 @@ struct Generator MakeGenerator2 (int GenID, double IntTime, int DestID)
     d->EventType = GENERATE2;
     d->Cust = NULL;
     d->CompID = GenID;
-    printf("%f\n", CurrentTime());
-    Schedule (IntTime, d);  // should use random draw here
-
+    //printf("%f\n", CurrentTime());
+    Schedule (IntTime, d,2,4);  // should use random draw here
+    numGenPatients++;
     return *p;
 }
 
@@ -244,9 +249,9 @@ struct Generator MakeGenerator3 (int GenID, double IntTime, int DestID)
     d->EventType = GENERATE3;
     d->Cust = NULL;
     d->CompID = GenID;
-    printf("%f\n", CurrentTime());
-    Schedule (IntTime, d);  // should use random draw here
-
+    //printf("%f\n", CurrentTime());
+    Schedule (IntTime, d,3,4);  // should use random draw here
+    numGenPatients++;
     return *p;
 }
 
@@ -271,15 +276,16 @@ struct Generator MakeGenerator4 (int GenID, double IntTime, int DestID)
     d->EventType = GENERATE4;
     d->Cust = NULL;
     d->CompID = GenID;
-    printf("%f\n", CurrentTime());
-    Schedule (IntTime, d);  // should use random draw here
-
+    //printf("%f\n", CurrentTime());
+    Schedule (IntTime, d,4,4);  // should use random draw here
+    numGenPatients++;
     return *p;
 }
 
 // Create an CheckInOut Component with identifier ExitID
-struct Station MakeStation (int StationID, double avgServiceTime, int DestID) {
-    struct Station* s;
+struct CheckInOut MakeCheckInOut (int StationID, double avgServiceTime, int DestID) {
+    struct CheckInOut* s;
+    //struct FIFOQueue* fifo;
     compCount++;
 
     // Add component to master list; Caller is responsible for handling set up errors
@@ -287,15 +293,61 @@ struct Station MakeStation (int StationID, double avgServiceTime, int DestID) {
     printf ("Creating Station Component, ID=%d, avgServiceTime=%f, Destination=%d\n", StationID, avgServiceTime, DestID);
 
     // Allocate space for component, fill in parameters
-    if ((s = malloc (sizeof(struct Station))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
+    if ((s = malloc (sizeof(struct CheckInOut))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
+    s -> avgServiceTime = avgServiceTime;
+    s -> DestComp = DestID;
+    s -> sTime = 0.0;
+    s ->count = 0;
+    s -> wait = 0;
+
+    FIFOQueue* fifo = (FIFOQueue*) malloc(sizeof(FIFOQueue));
+    
+    Component[StationID].Comp = s;
+    return *s;
+}
+
+// Create an CheckInOut Component with identifier ExitID
+struct Doctor MakeDoctor (int erID, double avgServiceTime, int DestID) {
+    struct Doctor* s;
+    compCount++;
+
+    // Add component to master list; Caller is responsible for handling set up errors
+    Component[erID].ComponentType = EMERROOM;
+    printf ("Creating Station Component, ID=%d, avgServiceTime=%f, Destination=%d\n", erID, avgServiceTime, DestID);
+
+    // Allocate space for component, fill in parameters
+    if ((s = malloc (sizeof(struct Doctor))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
     s -> avgServiceTime = avgServiceTime;
     s -> DestComp = DestID;
     s -> sTime = 0.0;
     s ->count = 0;
     s -> wait = 0;
     
-    Component[StationID].Comp = s;
+    Component[erID].Comp = s;
     return *s;
+}
+
+struct Fork MakeFork (int StationID, int distribution, int* fieldArr) {
+    struct Fork* f;
+    compCount++;
+    double prob[distribution];
+    double acc = 1.0/distribution;
+    for (int i = 0; i < distribution-1; i++) {
+        prob[i] = acc;
+    }
+    prob[distribution - 1] = 1 - (acc * (distribution - 1));
+
+    // Add component to master list; Caller is responsible for handling set up errors
+    Component[StationID].ComponentType = FORK;
+    printf ("Creating Fork Component, ID=%d, fieldArr=%d\n", StationID, fieldArr[0]);
+
+    // Allocate space for component, fill in parameters
+    if ((f = malloc (sizeof(struct Fork))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
+    f -> distribution = distribution;
+    f -> probArr = prob;
+    f -> fieldArr = fieldArr;
+    Component[StationID].Comp = f;
+    return *f;
 }
 
 // Create an Exit Component with identifier ExitID
@@ -435,12 +487,13 @@ void Generate1 (struct EventData *e)
     if ((d=malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
     d->EventType = ARRIVAL;
     d->Cust = NewCust;
-    printf("%d", NewCust -> type);
+
+    //printf("%d", NewCust -> type);
     d->CompID = pGen->DestComp;
-    printf("destination Comp: %d\n", pGen->DestComp);
-    printf("Comp type %d\n",Component[d->CompID].ComponentType);
+    //printf("destination Comp: %d\n", pGen->DestComp);
+    //printf("Comp type %d\n",Component[d->CompID].ComponentType);
     ts = CurrentTime();
-    Schedule (ts, d);
+    Schedule (ts, d, d->Cust ->type, d->CompID);
     
     // Schedule next generation event
     if ((d=malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
@@ -459,18 +512,22 @@ void Generate1 (struct EventData *e)
     
     d->CompID = e->CompID;
     ts = CurrentTime() + pGen->IntArrTime;       // need to modify to exponential random number
-    Schedule (ts, d);
-    printf("scheduled at %f\n", ts);     
+    Schedule (ts, d, Component[e->CompID].ComponentType, 4);
+    //printf("scheduled at %f\n", ts);     
+    numGenPatients++;
 }
 
 // event handler for arrival events
 void Arrival (struct EventData *e, double done)
 {
     struct EventData *d;
+    struct EventData *k;
     double ts;
     int Comp;                   // ID of component where arrival occurred
     struct Exit *pExit;         // pointer to info on exit component
-    struct Station* pStation;   // pointer to info at station 
+    struct CheckInOut* pCheckInOut;   // pointer to info at station 
+    struct Doctor *pER;
+    struct Fork* pFork;
 
     if (e->EventType != ARRIVAL) {fprintf (stderr, "Unexpected event type\n"); exit(1);}
     //printf("component type: %d\n",Component[Comp].ComponentType);
@@ -481,38 +538,170 @@ void Arrival (struct EventData *e, double done)
         pExit = (struct Exit *) Component[e->CompID].Comp;
         (pExit->Count)++;       // number of exiting ßcustomers
         free (e->Cust);         // release memory of exiting customer
+        numPatientsSaved ++;
     }
     else if (Component[e->CompID].ComponentType == QUEUE_STATION) {
 
         // code for customer arrival at a queue station
-        pStation = (struct Station*) Component[e -> CompID].Comp;
-        (pStation -> count) ++;
+        pCheckInOut = (struct CheckInOut*) Component[e -> CompID].Comp;
+        (pCheckInOut -> count) ++;
 
         if ((d=malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
         d->EventType = ARRIVAL;  
         d -> Cust = e -> Cust;   
-        d->CompID = pStation -> DestComp;
+        d->CompID = pCheckInOut -> DestComp;
+        // if (pStation -> fifo -> first == NULL && pStation -> fifo -> last == NULL) {
+        //     pStation -> fifo -> first == d -> Cust;
+        //     pStation -> fifo -> last == d -> Cust;
+        // } else {
+        //     pStation -> fifo -> temp = pStation -> fifo -> last;
+        //     pStation -> fifo -> last -> next = d -> Cust;
+        //     pStation -> fifo -> last = pStation -> fifo -> last -> next;
+        // }
+
+        // if ((k=malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
+        // k -> Cust = pStation -> fifo -> first;
+        // k -> EventType = ARRIVAL;
+        // k -> CompID = pStation -> DestComp;
+        // pStation -> fifo -> temp = pStation -> fifo -> first;
+        // pStation -> fifo -> first = pStation -> fifo -> first -> next;
+        // free(pStation -> fifo -> temp);
+        // Schedule(CurrentTime(), k);
+
+
+
         
-        double u = (pStation -> avgServiceTime);
+        double u = (pCheckInOut -> avgServiceTime);
         //if (CurrentTime() + (pStation -> avgServiceTime) > pStation -> sTime) {
-        if (CurrentTime() >= pStation -> sTime) {
+        if (CurrentTime() >= pCheckInOut -> sTime) {
             double aTime = (-u*(log(1.0 - urand())));            //exponentian random varialbe
-            Schedule(CurrentTime() + aTime, d);
-            pStation -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
+            Schedule(CurrentTime() + pCheckInOut -> avgServiceTime, d, d->Cust ->type, d->CompID);
+            pCheckInOut -> sTime = CurrentTime() + (pCheckInOut -> avgServiceTime);
         } else {
             double aTime = (-u*(log(1.0 - urand())));             //exponential random varialbe
-            Schedule(pStation -> sTime + aTime, d); 
-            if (pStation -> sTime + aTime > done) {
-                pStation -> wait += (done - CurrentTime());
+            Schedule(pCheckInOut -> sTime + pCheckInOut -> avgServiceTime, d, d->Cust ->type,  d->CompID); 
+            if (pCheckInOut -> sTime + pCheckInOut -> avgServiceTime > done) {
+                pCheckInOut -> wait += (done - CurrentTime());
             } else {
-                pStation -> wait += (pStation -> sTime) - CurrentTime();
+                pCheckInOut -> wait += (pCheckInOut -> sTime) - CurrentTime();
             }
-            pStation -> sTime = pStation -> sTime + (pStation -> avgServiceTime);
-            e -> Cust -> WaitTime += (pStation -> sTime) - CurrentTime();
+            pCheckInOut -> sTime = pCheckInOut -> sTime + (pCheckInOut -> avgServiceTime);
+            e -> Cust -> WaitTime += (pCheckInOut -> sTime) - CurrentTime();
         }
     }
-    else if (Component[Comp].ComponentType == FORK) {
+    else if (Component[e -> CompID].ComponentType == EMERROOM) {
+        pER = (struct Doctor*) Component[e -> CompID].Comp;
+        (pER -> count) ++;
+
+        if ((d=malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
+        d->EventType = ARRIVAL;  
+        d -> Cust = e -> Cust;   
+        d->CompID = pER -> DestComp;
+        //printf("this is the dest comp: %d\n", d->CompID);
+        int fixTime;
+
+        double u = (pER -> avgServiceTime);
+        //if (CurrentTime() + (pStation -> avgServiceTime) > pStation -> sTime) {
+        if (d -> Cust -> type == 2) {
+            printf("This is the patients creation time vs current time: %f     %f", d -> Cust -> CreationTime, CurrentTime());
+            if (CurrentTime() >= pER-> sTime) {
+                //printf("\n\n\nhere %f     %f\n\n\n", pER -> sTime, CurrentTime());
+                Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
+                //pER -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
+                pER -> sTime = CurrentTime() + 30;
+            } else {
+                double add = PrioritySchedule(30.0, d, d->Cust ->type, d->CompID);
+
+                //printf("here2");
+                pER -> sTime = 30 + add; //this is incorrect
+            }
+        } else if (d -> Cust -> type == 3) {
+            printf("This is the patients creation time vs current time: %f     %f", d -> Cust -> CreationTime, CurrentTime());
+            if (CurrentTime() - d -> Cust -> CreationTime > 90) {
+                printf("\nDEATH!!\n\n\n\n\n");
+                free(d);
+                numDeaths++;
+            } else {
+                if (CurrentTime() >= pER-> sTime) {
+                    //printf("\n\n\nhere %f     %f\n\n\n", pER -> sTime, CurrentTime());
+                    Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
+                    //pER -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
+                    pER -> sTime = CurrentTime() + 60;
+                } else {
+                    double add = PrioritySchedule(60.0, d, d->Cust ->type, d->CompID);
+
+                    //printf("here2");
+                    pER -> sTime = 60 + add; //this is incorrect
+                }
+            }
+        } else if (d -> Cust -> type == 4) {
+            printf("This is the patients creation time vs current time: %f     %f", d -> Cust -> CreationTime, CurrentTime());
+            if (CurrentTime() - d -> Cust -> CreationTime > 60) {
+                printf("\nDEATH!!\n\n\n\n\n");
+                free(d);
+                numDeaths++;
+            } else {
+                if (CurrentTime() >= pER-> sTime) {
+                    //printf("\n\n\nhere %f     %f\n\n\n", pER -> sTime, CurrentTime());
+                    Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
+                    //pER -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
+                    pER -> sTime = CurrentTime() + 90;
+                } else {
+                    double add = PrioritySchedule(90.0, d, d->Cust ->type, d->CompID);
+
+                    //printf("here2");
+                    pER -> sTime = 90 + add; //this is incorrect
+                }
+            }     
+        } else {
+            printf("This is the patients creation time vs current time: %f     %f", d -> Cust -> CreationTime, CurrentTime());
+            if (CurrentTime() >= pER -> sTime) {
+                Schedule(CurrentTime(), d, d->Cust ->type, d->CompID);
+                //printf("scheduled event at: %f\n", CurrentTime());
+                //pER -> sTime = CurrentTime() + (-u*(log(1.0 - urand())));
+                pER -> sTime = CurrentTime() + (pER-> avgServiceTime);
+            } else {
+                double aTime = (-u*(log(1.0 - urand())));             //exponential random varialbe
+                Schedule(pER -> sTime, d, d->Cust ->type, d->CompID); 
+                //printf("scheduled this at: %f\n", pER -> sTime);
+
+                if (pER -> sTime > done) {
+                    pER -> wait += (done - CurrentTime());
+                } else {
+                    pER -> wait += (pER -> sTime) - CurrentTime();
+                }
+                pER -> sTime = pER -> sTime + (pER -> avgServiceTime);
+                e -> Cust -> WaitTime += (pER -> sTime) - CurrentTime();
+            }
+        }
+            
+    }
+    else if (Component[e -> CompID].ComponentType == FORK) {
         // code for customer arrival at a fork component
+        pFork = (struct Fork*) Component[e -> CompID].Comp;
+        if ((d=malloc (sizeof(struct EventData))) == NULL) {fprintf(stderr, "malloc error\n"); exit(1);}
+        d->EventType = ARRIVAL;  
+        d -> Cust = e -> Cust;   
+
+        //create random number
+        for (int i = 0; i < 3; i++) {
+            //#printf("comp array %d\n", pFork -> fieldArr[i]);
+            //#Component[(pFork -> fieldArr[i])].Comp -> sTime = 0.0;
+            //printf("comp array sTime: %f\n", Component[(pFork -> fieldArr[i])].Comp -> sTime);
+        }
+        double r = (double)rand() / RAND_MAX;
+        int p = 0; while (pFork -> probArr[p] != 0) { p++; }
+        int end = (int)(sizeof(pFork -> probArr) / sizeof(pFork -> probArr[0])) + 1;
+        double incProb = pFork -> probArr[0];             //incrementing probability
+        for (int i = 1; i < pFork -> distribution+1; i++) { //change int distribution
+            if (r <= incProb) {
+                d->CompID = pFork -> fieldArr[i-1]; //will have to change destination
+                Schedule(CurrentTime(), d, d->Cust ->type, pER -> sTime);
+                break;
+            } else { 
+                incProb += pFork -> probArr[i];
+            }
+        }
     }
     else {fprintf (stderr, "Bad component type for arrival event\n"); exit(1);}
 }
@@ -528,15 +717,45 @@ int main (void)
 
     double IAT1 = 10;
     double IAT2 = 18;
+    int destC1[] = {6,7,8,9,10};
+    int destC2[] = {12,13,14,15,16};
+    int destC3[] = {17,18,19,20,21};
     
     // create components
-    MakeGenerator1 (0, 10, 4);
-    MakeGenerator2 (1, 18, 4);
-    MakeGenerator3 (2, 30, 4);
-    MakeGenerator4 (3, 60, 4);
-    MakeStation (4, 5, 5);
-    MakeStation (5, 5, 6);
-    MakeExit (6);
 
-    RunSim(120.0);
+    ///////////////////////////////////////////////////////////////////////////////////////
+    // this program creates:
+    // - 4 generators, each one producing the different patient type
+    // - 5 people at the check in counter
+    // - 5 doctors
+    // - 5 people at the check out counter
+    ///////////////////////////////////////////////////////////////////////////////////////
+    MakeGenerator1 (0, 6, 5);               //these numbers 6,18,30,and 60 should be varied to account for the holidays portion of analysis
+    MakeGenerator2 (1, 18, 5);
+    MakeGenerator3 (2, 30, 5);
+    MakeGenerator4 (3, 60, 5);
+    MakeFork(5,5,destC1);                   //destC1, dest C2, and destC3 are arrays of the different components to which the fork leads
+    MakeCheckInOut (6, 5, 11);              //the middle number "5" should NEVER be changed for CheckInOuts
+    MakeCheckInOut (7, 5, 11);              //what should vary is the number of people at the Check In/Out stations (make more MakeCheckInOuts())
+    MakeCheckInOut (8, 5, 11);
+    MakeCheckInOut (9, 5, 11);
+    MakeCheckInOut (10, 5, 11);
+    MakeFork(11,5,destC2);
+    MakeDoctor(12,15,17);                   //the middle number "15" should NEVER be changed for MakeDoctors
+    MakeDoctor(13,15,17);
+    MakeDoctor(14,15,17);
+    MakeDoctor(15,15,17);
+    MakeDoctor(16,15,17);
+    MakeFork(17,5,destC3);
+    MakeCheckInOut (18, 5, 23);             //the middle number "5" should NEVER be changed for CheckInOuts
+    MakeCheckInOut (19, 5, 23);
+    MakeCheckInOut (20, 5, 23);
+    MakeCheckInOut (21, 5, 23);
+    MakeCheckInOut (22, 5, 23);
+    MakeExit (23);
+
+    RunSim(600.0);          
+    printf("\n\nnum Patients who are generated: %d", numGenPatients);
+    printf("\ndeaths: %d", numDeaths);
+    printf("\nsaved: %d\n\n", numPatientsSaved);
 }
