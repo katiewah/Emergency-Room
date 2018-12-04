@@ -41,10 +41,8 @@ Installation
 
 To install the discrete time interval program, simply run
 
-    gcc main.c engine.c application.c -std=c99 -o test
-    
-To install the exponential time interval program, simply run
-    gcc mainRand.c engineRand.c applicationRand.c -std=c99 -o test
+    gcc main.c engine.c application.c -std=c99 -o test1
+    gcc mainRand.c engineRand.c applicationRand.c -std=c99 -o test2
     
 Note: The -std=c99 flag is required on some C compilers
 to allow variable declarations at arbitrary locations in
@@ -53,9 +51,10 @@ a function.
 Execution
 -----------
 
-Assuming your executable is called “test”, run it using
+Assuming your executables are called “test1” and “test2”, run it using
 
-    ./test emergency.txt
+    ./test1 emergency.txt
+    ./test2 emergency.txt
     
 Note: emergency.txt is the text file which includes the number 
 of doctors, number of staff members, and inter-arrival times of 
