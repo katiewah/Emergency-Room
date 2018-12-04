@@ -25,6 +25,7 @@ void changeSchedulePQ (int type, double ts, void *data, int add);
 
 double PrioritySchedule (double ts, void *data, int custType, int nextComp);
 
+
 //double returnsTime(double ts);
 
 //void bubbleSort(struct Event *start);
@@ -38,4 +39,3 @@ double PrioritySchedule (double ts, void *data, int custType, int nextComp);
 void EventHandler (void *data, double done);
 
 double end(double EndTime);
-
