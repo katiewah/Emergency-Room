@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
-#include "sim.h"
+#include "simRand.h"
 
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -11,7 +11,7 @@
 
 int main(int argc, const char * argv[])
 {
-
+    srand(time(NULL));
     const char* filename = argv[1];
     FILE* f = fopen(filename, "r");
     if (f == NULL) {
